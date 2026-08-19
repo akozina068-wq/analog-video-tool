@@ -1,0 +1,40 @@
+ANALOG VIDEO TOOL - DEPLOY GUIDE
+==================================
+I built and tested this end-to-end - upload works, ffmpeg processing works,
+timestamp overlay works. This gets it live so you can use it from your phone.
+
+WHAT YOU NEED
+- A free GitHub account (github.com) if you don't have one
+- A free Render account (render.com) - sign in with GitHub, one click
+
+STEP 1: PUT THE CODE ON GITHUB
+1. Go to github.com, click the "+" top right > New repository
+2. Name it "analog-video-tool", keep it Private, click Create
+3. On the new repo page, click "uploading an existing file"
+4. Drag in every file from this folder (server.js, package.json, Dockerfile,
+   .gitignore, the public folder, etc.) and commit
+
+STEP 2: DEPLOY ON RENDER
+1. Go to render.com, sign in with GitHub
+2. Click New > Web Service
+3. Connect your "analog-video-tool" repo
+4. Render will detect the Dockerfile automatically - leave settings as default
+5. Under "Instance Type" pick the Free tier
+6. Click "Create Web Service"
+7. Wait 3-5 minutes while it builds (installs ffmpeg + your app)
+
+STEP 3: USE IT
+Render gives you a URL like: https://analog-video-tool.onrender.com
+Open that on your iPhone, add it to your home screen (Share > Add to Home
+Screen) so it looks and opens like an app icon.
+
+That's it - tap the icon, pick a video, tap process, download.
+
+NOTES
+- Free tier sleeps after 15 min of no use, so the first request after a
+  while takes ~30 seconds extra to "wake up." After that it's fast.
+- Free tier has limited monthly hours - plenty for personal posting volume,
+  but if you start using this constantly later we can look at a paid tier
+  ($7/mo) for always-on.
+- If a video upload fails, it's almost always a file-size or timeout issue -
+  send me the error and I'll adjust the limits in server.js.
