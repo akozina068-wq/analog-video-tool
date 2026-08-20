@@ -118,7 +118,13 @@ function escapeText(t) {
 
 app.get('/status/:jobId', (req, res) => {
   const job = jobs[req.params.jobId];
-  if (!job) return res.status(404).json({ error: 'not found' });
+  if (!job) {
+    // Job not found usually means the server restarted mid-processing -
+    // most often because it ran out of memory (e.g. a 4K clip on the free
+    // tier) and got auto-restarted, wiping the in-memory job list. Tell
+    // the phone that plainly instead of leaving it polling forever.
+    return res.json({ status: 'error', reason: 'lost' });
+  }
   res.json(job);
 });
 
