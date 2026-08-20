@@ -178,7 +178,7 @@
     }
   });
 
-  async function poll(jobId) {
+  async function poll(jobId, attempt = 0) {
     const res = await fetch('/status/' + jobId);
     const data = await res.json();
     if (data.status === 'done') {
@@ -189,10 +189,17 @@
       `;
       goBtn.disabled = false;
     } else if (data.status === 'error') {
-      statusEl.textContent = 'processing failed, try again';
+      statusEl.textContent = data.reason === 'lost'
+        ? 'server ran out of memory and restarted - try a lower resolution (1080p is safest)'
+        : 'processing failed, try again';
+      goBtn.disabled = false;
+    } else if (attempt > 150) {
+      // ~5 minutes of polling with no result - stop waiting instead of
+      // spinning forever
+      statusEl.textContent = 'this is taking too long - likely crashed. try 1080p instead of 4K';
       goBtn.disabled = false;
     } else {
-      setTimeout(() => poll(jobId), 2000);
+      setTimeout(() => poll(jobId, attempt + 1), 2000);
     }
   }
 </script>
