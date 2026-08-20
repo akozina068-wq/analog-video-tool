@@ -29,11 +29,9 @@
   .picker {
     display: flex; gap: 8px; margin-top: 6px;
   }
-  .picker button {
-    flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #4a443a;
-    background: #1c1a17; color: #b8ac97; font-size: 14px;
-  }
+  .picker button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #4a443a; background: #1c1a17; color: #b8ac97; font-size: 14px; }
   .picker button.active { background: #e8934a; color: #1c1a17; border-color: #e8934a; font-weight: 600; }
+  .preset-desc { font-size: 12px; color: #8a8072; margin-top: 6px; line-height: 1.4; }
   .upload-zone {
     margin-top: 20px; border: 2px dashed #4a443a; border-radius: 14px;
     padding: 30px 16px; text-align: center; color: #8a8072; font-size: 14px;
@@ -69,11 +67,27 @@
     <label>timestamp text</label>
     <input type="text" id="stamp" maxlength="20" placeholder="08 19 26">
 
-    <label>intensity</label>
-    <div class="picker">
-      <button type="button" class="active" data-val="classic">classic</button>
-      <button type="button" data-val="strong">strong</button>
+    <label>preset</label>
+    <div class="picker" id="presetPicker">
+      <button type="button" class="active" data-val="crt">crt</button>
+      <button type="button" data-val="hero">hero</button>
+      <button type="button" data-val="diary">diary</button>
     </div>
+    <div class="preset-desc" id="presetDesc">signal breaking through — glitch, scan lines, cool tint</div>
+
+    <label>timestamp text</label>
+    <input type="text" id="stamp" maxlength="24" placeholder="08 19 26">
+
+    <label id="captionLabel" style="display:none">caption (shows on video instead of timestamp)</label>
+    <input type="text" id="caption" maxlength="60" placeholder="you are not lazy" style="display:none">
+
+    <label>resolution</label>
+    <div class="picker" id="resPicker">
+      <button type="button" data-val="720">720p</button>
+      <button type="button" class="active" data-val="1080">1080p</button>
+      <button type="button" data-val="4k">4K</button>
+    </div>
+    <div class="preset-desc" id="resWarning" style="display:none">4K needs more server memory than the free tier — use if you've upgraded, otherwise stick to 1080p</div>
 
     <div class="upload-zone" id="dropText">tap below to choose a video</div>
     <input type="file" id="fileInput" accept="video/*">
@@ -94,15 +108,39 @@
   const statusEl = document.getElementById('status');
   const resultEl = document.getElementById('result');
   const stampInput = document.getElementById('stamp');
-  const pickerBtns = document.querySelectorAll('.picker button');
+  const pickerBtns = document.querySelectorAll('#presetPicker button, #resPicker button');
+  const presetBtns = document.querySelectorAll('#presetPicker button');
+  const resBtns = document.querySelectorAll('#resPicker button');
+  const presetDesc = document.getElementById('presetDesc');
+  const resWarning = document.getElementById('resWarning');
+  const captionLabel = document.getElementById('captionLabel');
+  const captionInput = document.getElementById('caption');
 
-  let intensity = 'classic';
+  const descriptions = {
+    crt: 'signal breaking through — glitch, scan lines, cool tint',
+    hero: 'clean and isolated — warm, sharp, one subject',
+    diary: 'quiet and intimate — heavy grain, warm fade, caption in frame'
+  };
+
+  let preset = 'crt';
+  let resolution = '1080';
   let chosenFile = null;
 
-  pickerBtns.forEach(b => b.addEventListener('click', () => {
-    pickerBtns.forEach(x => x.classList.remove('active'));
+  presetBtns.forEach(b => b.addEventListener('click', () => {
+    presetBtns.forEach(x => x.classList.remove('active'));
     b.classList.add('active');
-    intensity = b.dataset.val;
+    preset = b.dataset.val;
+    presetDesc.textContent = descriptions[preset];
+    const isDiary = preset === 'diary';
+    captionLabel.style.display = isDiary ? 'block' : 'none';
+    captionInput.style.display = isDiary ? 'block' : 'none';
+  }));
+
+  resBtns.forEach(b => b.addEventListener('click', () => {
+    resBtns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    resolution = b.dataset.val;
+    resWarning.style.display = resolution === '4k' ? 'block' : 'none';
   }));
 
   pickBtn.addEventListener('click', () => fileInput.click());
@@ -124,7 +162,9 @@
     const form = new FormData();
     form.append('video', chosenFile);
     form.append('stamp', stampInput.value);
-    form.append('intensity', intensity);
+    form.append('caption', captionInput.value);
+    form.append('preset', preset);
+    form.append('resolution', resolution);
 
     try {
       const res = await fetch('/process', { method: 'POST', body: form });
