@@ -27,8 +27,10 @@ app.post('/process', upload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No video uploaded' });
 
   const jobId = randomUUID();
-  const stamp = (req.body.stamp || '').slice(0, 20).replace(/['"\\]/g, '') || defaultStamp();
-  const intensity = req.body.intensity === 'strong' ? 'strong' : 'classic';
+  const stamp = (req.body.stamp || '').slice(0, 24).replace(/['"\\]/g, '') || defaultStamp();
+  const caption = (req.body.caption || '').slice(0, 60).replace(/['"\\]/g, '');
+  const preset = ['crt', 'hero', 'diary'].includes(req.body.preset) ? req.body.preset : 'crt';
+  const res_choice = ['720', '1080', '4k'].includes(req.body.resolution) ? req.body.resolution : '1080';
 
   const inputPath = req.file.path;
   const outputName = `analog_${jobId}.mp4`;
@@ -37,25 +39,16 @@ app.post('/process', upload.single('video'), (req, res) => {
   jobs[jobId] = { status: 'processing' };
   res.json({ jobId });
 
-  const grain = intensity === 'strong' ? 20 : 12;
-  const sat = intensity === 'strong' ? 1.35 : 1.25;
-  const vignette = intensity === 'strong' ? 'PI/4' : 'PI/6';
+  const filter = buildFilter(preset, res_choice, stamp, caption);
 
-  const fontPath = findFont();
-  const filter =
-    `eq=contrast=1.08:saturation=${sat}:gamma=0.95,` +
-    `curves=preset=vintage,` +
-    `noise=alls=${grain}:allf=t+u,` +
-    `vignette=${vignette}` +
-    (fontPath
-      ? `,drawtext=fontfile='${fontPath}':text='${stamp}':fontcolor=orange@0.85:fontsize=30:x=w-tw-35:y=h-th-35`
-      : '');
-
+  // 4K needs a real amount of RAM to decode+encode - only safe on a paid
+  // instance. 720/1080 stay lean enough for the free tier.
   const args = [
     '-y', '-i', inputPath,
     '-vf', filter,
-    '-c:v', 'libx264', '-crf', '18', '-preset', 'veryfast',
-    '-c:a', 'copy',
+    '-c:v', 'libx264', '-crf', '20', '-preset', 'ultrafast',
+    '-threads', '1', '-x264opts', 'rc-lookahead=10:ref=1',
+    '-c:a', 'aac', '-b:a', '128k',
     outputPath
   ];
 
@@ -73,6 +66,55 @@ app.post('/process', upload.single('video'), (req, res) => {
     }
   });
 });
+
+// The three locked presets from the style guide. Each is a fixed recipe -
+// same filter chain every time, so the look stays consistent across posts
+// instead of drifting per-video.
+function buildFilter(preset, res_choice, stamp, caption) {
+  const dims = { '720': 1280, '1080': 1920, '4k': 3840 };
+  const cap = dims[res_choice];
+  const scale = `scale='min(${cap},iw)':'min(${cap},ih)':force_original_aspect_ratio=decrease,`;
+  const font = findFont();
+  const textOn = (text, opts) => font
+    ? `,drawtext=fontfile='${font}':text='${escapeText(text)}':${opts}`
+    : '';
+
+  if (preset === 'crt') {
+    // signal breaking through: cool tint, chromatic aberration, scanline
+    // interlace texture, static noise, corner timestamp
+    return scale +
+      `eq=contrast=1.12:saturation=1.05:brightness=-0.02,` +
+      `curves=preset=cross_process,` +
+      `rgbashift=rh=-3:bh=3,` +
+      `il=l=i:c=i,` +
+      `noise=alls=14:allf=t+u,` +
+      `vignette=PI/5` +
+      textOn(stamp, `fontcolor=0x1B4B4A@0.9:fontsize=28:x=w-tw-30:y=h-th-30`);
+  }
+
+  if (preset === 'hero') {
+    // clean, isolated, warm - the "one object, dramatic light" look
+    return scale +
+      `eq=contrast=1.1:saturation=1.2:gamma=1.02,` +
+      `curves=preset=medium_contrast,` +
+      `unsharp=5:5:0.6,` +
+      `vignette=PI/6` +
+      textOn(stamp, `fontcolor=0xD9622B@0.85:fontsize=28:x=w-tw-30:y=h-th-30`);
+  }
+
+  // diary: light-leak warm grade, heavy grain, soft contrast, caption in-frame
+  const capOpts = `fontcolor=0xF2E8D8@0.95:fontsize=26:x=(w-tw)/2:y=h-th-60:box=1:boxcolor=0x0D0D0D@0.35:boxborderw=14`;
+  return scale +
+    `eq=contrast=0.95:saturation=1.15:gamma=1.05:brightness=0.02,` +
+    `curves=preset=vintage,` +
+    `noise=alls=22:allf=t+u,` +
+    `vignette=PI/4` +
+    (caption ? textOn(caption, capOpts) : textOn(stamp, `fontcolor=0xF2E8D8@0.85:fontsize=26:x=w-tw-30:y=h-th-30`));
+}
+
+function escapeText(t) {
+  return t.replace(/:/g, '\\:').replace(/%/g, '\\%');
+}
 
 app.get('/status/:jobId', (req, res) => {
   const job = jobs[req.params.jobId];
