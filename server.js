@@ -46,9 +46,9 @@ app.post('/process', upload.single('video'), (req, res) => {
   const args = [
     '-y', '-i', inputPath,
     '-vf', filter,
-    '-c:v', 'libx264', '-crf', '20', '-preset', 'ultrafast',
-    '-threads', '1', '-x264opts', 'rc-lookahead=10:ref=1',
-    '-c:a', 'aac', '-b:a', '128k',
+    '-c:v', 'libx264', '-crf', '23', '-preset', 'ultrafast',
+    '-threads', '1',
+    '-c:a', 'aac', '-b:a', '96k',
     outputPath
   ];
 
@@ -75,21 +75,28 @@ function buildFilter(preset, res_choice, stamp, caption) {
   const cap = dims[res_choice];
   const scale = `scale='min(${cap},iw)':'min(${cap},ih)':force_original_aspect_ratio=decrease,`;
   const font = findFont();
-  const textOn = (text, opts) => font
-    ? `,drawtext=fontfile='${font}':text='${escapeText(text)}':${opts}`
-    : '';
+
+  // Animated text: fades in and slides up into its resting position over
+  // the first 0.7s instead of just sitting there static. baseAlpha is the
+  // steady-state opacity once the entrance finishes.
+  const animatedText = (text, x, restY, baseAlpha, color, extra = '') => {
+    if (!font) return '';
+    const alphaExpr = `min(t/0.7\\,${baseAlpha})`;
+    const yExpr = `(${restY})+18*max(0\\,1-t/0.6)`;
+    return `,drawtext=fontfile='${font}':text='${escapeText(text)}':` +
+      `fontcolor=${color}:alpha='${alphaExpr}':x=${x}:y='${yExpr}'${extra}`;
+  };
 
   if (preset === 'crt') {
-    // signal breaking through: cool tint, chromatic aberration, scanline
-    // interlace texture, static noise, corner timestamp
+    // signal breaking through: cool tint, chromatic aberration, static
+    // noise, corner timestamp that fades/slides in like it's tuning in
     return scale +
       `eq=contrast=1.12:saturation=1.05:brightness=-0.02,` +
       `curves=preset=cross_process,` +
       `rgbashift=rh=-3:bh=3,` +
-      `il=l=i:c=i,` +
-      `noise=alls=14:allf=t+u,` +
+      `noise=alls=10:allf=t+u,` +
       `vignette=PI/5` +
-      textOn(stamp, `fontcolor=0x1B4B4A@0.9:fontsize=28:x=w-tw-30:y=h-th-30`);
+      animatedText(stamp, 'w-tw-30', 'h-th-30', 0.9, '0x1B4B4A', ':fontsize=28');
   }
 
   if (preset === 'hero') {
@@ -99,17 +106,20 @@ function buildFilter(preset, res_choice, stamp, caption) {
       `curves=preset=medium_contrast,` +
       `unsharp=5:5:0.6,` +
       `vignette=PI/6` +
-      textOn(stamp, `fontcolor=0xD9622B@0.85:fontsize=28:x=w-tw-30:y=h-th-30`);
+      animatedText(stamp, 'w-tw-30', 'h-th-30', 0.85, '0xD9622B', ':fontsize=28');
   }
 
-  // diary: light-leak warm grade, heavy grain, soft contrast, caption in-frame
-  const capOpts = `fontcolor=0xF2E8D8@0.95:fontsize=26:x=(w-tw)/2:y=h-th-60:box=1:boxcolor=0x0D0D0D@0.35:boxborderw=14`;
+  // diary: light-leak warm grade, heavy grain, soft contrast, caption
+  // fades/slides into place near the bottom like a thought settling in
+  const captionExtra = ':fontsize=26:box=1:boxcolor=0x0D0D0D@0.35:boxborderw=14';
   return scale +
     `eq=contrast=0.95:saturation=1.15:gamma=1.05:brightness=0.02,` +
     `curves=preset=vintage,` +
-    `noise=alls=22:allf=t+u,` +
+    `noise=alls=16:allf=t+u,` +
     `vignette=PI/4` +
-    (caption ? textOn(caption, capOpts) : textOn(stamp, `fontcolor=0xF2E8D8@0.85:fontsize=26:x=w-tw-30:y=h-th-30`));
+    (caption
+      ? animatedText(caption, '(w-tw)/2', 'h-th-60', 0.95, '0xF2E8D8', captionExtra)
+      : animatedText(stamp, 'w-tw-30', 'h-th-30', 0.85, '0xF2E8D8', ':fontsize=26'));
 }
 
 function escapeText(t) {
